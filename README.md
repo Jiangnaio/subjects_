@@ -9,36 +9,36 @@ Data: https://github.com/jd-coderepos/llms4subjects/
 
 **平均查询损失**：
 对于每个查询q，损失为：
-\[
+$
 L_q = L_{pos} + \lambda_{weight} \times L_{neg}
-\]
+$
 
 **正样本损失**（平方距离损失）：
-\[
+$
 L_{pos} = \frac{1}{|P_q|} \sum_{p \in P_q} (1 - \cos(q, p))^2
-\]
-其中 \(P_q\) 是查询q的正样本集合，\(\cos(q, p)\) 是查询q和正样本p的余弦相似度
+$
+其中 $P_q$ 是查询q的正样本集合，$\cos(q, p)$ 是查询q和正样本p的余弦相似度
 
 **负样本损失**（带有边界的hinge loss）：
-\[
+$
 L_{neg} = \frac{1}{|N_q|} \sum_{n \in N_q} \max(0, \alpha - (1 - \cos(q, n)))
-\]
+$
 或等价地：
-\[
+$
 L_{neg} = \frac{1}{|N_q|} \sum_{n \in N_q} \max(0, \alpha - d(q, n))
-\]
-其中 \(N_q\) 是查询q的负样本集合，\(d(q, n) = 1 - \cos(q, n)\) 是余弦距离，α是边界参数
+$
+其中 $N_q$ 是查询q的负样本集合，$d(q, n) = 1 - \cos(q, n)$ 是余弦距离，α是边界参数
 
 **多样性正则化损失**：
-\[
+$
 L_{reg} = \frac{1}{|Q|} \sum_{q \in Q} \frac{1}{|P_q|(|P_q|-1)} \sum_{i \neq j} (\cos(p_i, p_j) - 0.5)^2
-\]
+$
 其中 \(p_i, p_j\) 是同一查询的不同正样本
 
 **最终损失**：
-\[
+$
 L = \frac{1}{|Q|} \sum_{q \in Q} L_q + \lambda_{reg} \times L_{reg}
-\]
+$
 
 ## 损失函数特点分析
 
