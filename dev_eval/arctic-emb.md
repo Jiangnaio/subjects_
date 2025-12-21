@@ -1,6 +1,7 @@
 
 ### model:Snowflake/snowflake-arctic-embed-l-v2.0(zero-shot)
 dataset: dev 1000 ramdom samples 
+
 k     Recall@k     Precision@k    F1@k        
 ------------------------------------------------------------
 5     0.2917       0.1184         0.1554      
@@ -11,6 +12,7 @@ k     Recall@k     Precision@k    F1@k
 50    0.5207       0.0243         0.0457
 
 ### model:Snowflake/snowflake-arctic-embed-l-v2.0(zero-shot+rerank)
+
 dataset: dev 1000 ramdom samples 
 After Re-ranking:
 Before Re-ranking (Coarse Retrieval Only):
@@ -43,15 +45,15 @@ k     Method       Recall@k     Precision@k    F1@k
 ------------------------------------------------------------
 
 ### model:Snowflake/snowflake-arctic-embed-l-v2.0(constractive+hard_negative, full-finetune)
+
 dataset: dev 1000 ramdom samples 
+
 k     Recall@k     Precision@k    F1@k        
 ------------------------------------------------------------
 5     0.3015       0.1240         0.1623      
 10    0.3883       0.0843         0.1306      
 20    0.4666       0.0532         0.0919      
 30    0.5154       0.0404         0.0728 
-
-
 40    0.5463       0.0327         0.0603      
 50    0.5700       0.0277         0.0517      
 ============================================================
