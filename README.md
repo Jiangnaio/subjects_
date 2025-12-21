@@ -1,3 +1,4 @@
+2025.12.21 分析发现，与title+abstract相关的主题很可能在title和abstract中出现过，故利用此特性进行重排序。可以明显提升结果。（见qwen3-0.6b-constractive-rank.xlsx）
 2025.12.7 由于title+abstract有大量长文本，且每个文本可能存在多个相关主题，考虑使用LLM提取长文本与主题相关的原因分析。一个长文本+一个正相关主题-->总结性句子。 利用LLM生成的句子与主题对Embedding模型进行微调。正分析如何利用生成的句子来提高微调效果。
 考虑加入生成任务来提高微调效果，参考《UniConv: Unifying Retrieval and Response Generation for Large Language Models in Conversations》的思路，效果不佳。正分析原因。
 
