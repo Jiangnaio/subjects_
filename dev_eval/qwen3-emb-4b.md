@@ -1,5 +1,5 @@
 
-zero-shot結果
+zero-shot
 
 datasets dev random 1000 samples
 
