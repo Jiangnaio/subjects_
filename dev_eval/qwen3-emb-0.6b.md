@@ -62,7 +62,7 @@ k     Method       Recall@k     Precision@k    F1@k
       Δ            +0.0282      +0.0020        +0.0036     
 ------------------------------------------------------------
 
-### model: Qwen/Qwen3-Embedding-0.6B (lora-r32+constractive,增加负主题数量，调节参数训练1-epoch的结果)
+### model: Qwen/Qwen3-Embedding-0.6B (full-finetuning+constractive,增加负主题数量，调节参数训练1-epo结
 
 k     Method       Recall@k     Precision@k    F1@k        
 ------------------------------------------------------------
@@ -91,7 +91,7 @@ k     Method       Recall@k     Precision@k    F1@k
       Δ            +0.0193      +0.0015        +0.0027     
 ------------------------------------------------------------
 
-### model: Qwen/Qwen3-Embedding-0.6B (lora-r32+constractive,增加负主题数量，调节参数训练2-epoch的结果)
+### model: Qwen/Qwen3-Embedding-0.6B (full-finetuning+constractive,增加负主题数量，调节参数训练2-epoch的结果)
 
 k     Method       Recall@k     Precision@k    F1@k        
 ------------------------------------------------------------
@@ -115,6 +115,8 @@ k     Method       Recall@k     Precision@k    F1@k
 40    Reranked     0.7237       0.0451         0.0831      
       Δ            +0.0247      +0.0024        +0.0042     
 ------------------------------------------------------------
+
+
 50    Coarse       0.7242       0.0360         0.0673      
 50    Reranked     0.7488       0.0377         0.0705      
       Δ            +0.0247      +0.0017        +0.0032     
