@@ -1,3 +1,5 @@
+2026.1.4 实验发现，相同的损失函数（多标签的InfoNCE）用于训练qwen3-emb-0.6b(decode-only系列)与arctic-emb(bert系列)呈现出不同的效果。训练Qwen3-emb-0.6b出现测试结果下降的情况；训练arctic-emb则明显得到提升（recall指标提升10%+）。 qwen3-emb-0.6b先使用多标签的对比损失函数训练，再使用多标签的InfoNCE训练，得到明显提升（recall指标提升10%+）。 arctic-emb与qwen3-emb-0.6b均采用全参数bf16精度训练，固定随机种子seed=42。
+
 2025.12.29 新设计的损失函数存在问题，尽管训练效果有提升（约提升10%+）,但损失函数不稳定，分析原因是训练样本中，每个样本的正相关主题不一样，正相关主题较多的样本损失函数值较大，故将正相关主题的计算的值取平均值，再次训练Snowflake/snowflake-arctic-embed-l-v2.0和Snowflake/snowflake-arctic-embed-m-v2.0观察结果。
 
 2025.12.27 使用info_nce该经版的损失函数，训练Snowflake/snowflake-arctic-embed-l-v2.0，采用bf16精度训练，训练过程中发现损失函数值不太稳定，训练到约0.55 epoch触发早停（即只训练55%的数据），dev测试中，recal@50从0.6697提升至0.7604。评测test集合，加上简单的关键词匹配重排序算法，test.recall@5=0.3893, test.recall@50=0.6685. 参考 https://arxiv.org/pdf/2407.18887 文档，优化训练数据采样与组织方式，或许能够取得到更优的效果。 重点研究损失函数的设计，数据的组织方式对训练结果的影响，针对私有RAG场景提供高效微调Embedding方案。 仍然待解决的问题，采用更大参数（比如4B），微调后的效果反而更差。
