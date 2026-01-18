@@ -1,3 +1,5 @@
+2026.1.18 基于InfoNCE改进的损失函数，在batch_size=8*6的情况下采用lora训练Qwen3-Embedding-4B,训练了300 steps，在test-tib-core数据集上测试，recall@50超过了Arctic-Embed-l-v2.0采用lora微调训练2 epochs的结果。使用lora微调测试效果明显由于全参数微调。batch_size等参数的设置对训练也有明显的影响。
+
 2026.1.4 实验发现，相同的损失函数（多标签的InfoNCE）用于训练qwen3-emb-0.6b(decode-only系列)与arctic-emb(bert系列)呈现出不同的效果。训练Qwen3-emb-0.6b出现测试结果下降的情况；训练arctic-emb则明显得到提升（recall指标提升10%+）。 qwen3-emb-0.6b先使用多标签的对比损失函数训练，再使用多标签的InfoNCE训练，得到明显提升（recall指标提升10%+）。 arctic-emb与qwen3-emb-0.6b均采用全参数bf16精度训练，固定随机种子seed=42。
 
 2025.12.29 新设计的损失函数存在问题，尽管训练效果有提升（约提升10%+）,但损失函数不稳定，分析原因是训练样本中，每个样本的正相关主题不一样，正相关主题较多的样本损失函数值较大，故将正相关主题的计算的值取平均值，再次训练Snowflake/snowflake-arctic-embed-l-v2.0和Snowflake/snowflake-arctic-embed-m-v2.0观察结果。
