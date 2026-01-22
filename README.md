@@ -1,3 +1,21 @@
+2026.1.22 当前工作总结：探索了通过训练SBert模型在多主题标记的潜力，分别使用Multi-Positive InfoNCE loss, Supervised Contrastive Loss（`supcon` 风格）, Contrastive Loss(带边界 hinge)训练Arctic-Embed, Qwen3-Embedding, e5,MiniLM等嵌入模型均有一定程度的提升，超参数batch_size等徐训练效果影响很大。目前训练最好的是Qwen3-Embedding-4B，采用lora-r32,batch_size取16,梯度累积为3,训练了267 steps（1epoch=2036 steps）。其测试结果对比
+all-test	Precision_5	Recall_5	F1_5	Precision_50	Recall_50	F1_50	Average Recall	recall_500
+	          0.3062	0.5554	0.3948	0.0476	0.8042	0.0898	0.735	
+	          0.2978	0.5481	0.386	0.0436	0.7503	0.0823	0.7041	
+	          0.1814	0.3370	0.23	0.0441	0.6933	0.0828	0.5715	                   0.908
+基于关键词匹配重排	0.251323589	0.426662866	0.31296	0.04622503	0.724586963	0.0867	0.620453279	
+								
+core-test	Precision_5	Recall_5	F1_5	Precision_50	Recall_50	F1_50	Average Recall	recall_500
+	          0.2491	0.5876    	0.3499	0.0377	0.8273	0.0721	0.7641	
+	          0.2978	0.5481    	0.386	0.0327	0.7206	0.0625	0.6935	
+	          0.1932	0.4524	    0.2708	0.034	0.7372	0.0651	0.6545	
+未重排	      0.1925	0.3558	    0.2495	0.046	0.7245	0.0867	0.6004                 0.908
+基于关键词匹配重排	0.172595802	0.44172231	0.245766667	0.031779716	0.740797187	0.060822222	0.645450072	
+分析原因：训练不足，但训练时间较长，单卡A100训练1epoch需要约30h, 总的训练数据集仅有9w多，使用合成数据集将会明显提升模型训练效果（在Arctic-m上验证过），加上合成数据集，总共训练数据集有97w。
+后期研究方向：基于FastXML的思想，混合传统算法与向量检索，提升重排序质量。当前SATA采用合成数据集+汇聚annif框架的多个算法。
+
+
+
 2026.1.18 基于InfoNCE改进的损失函数，在batch_size=8*6的情况下采用lora训练Qwen3-Embedding-4B,训练了300 steps，在test-tib-core数据集上测试，recall@50超过了Arctic-Embed-l-v2.0采用lora微调训练2 epochs的结果。使用lora微调测试效果明显由于全参数微调。batch_size等参数的设置对训练也有明显的影响。对训练的损失函数进行了描述，训练效果InfoNCE多主题适配版>supcon损失函数>对比损失函数多主体适配版。 现阶段，使用InfoNCE损失函数通过lora微调，采用简单规则重排序后的测试指标接近近SATA。 若考虑使用LLM进行重排序，在未微调的情况下出现重排质量下降，而微调又会面临损失函数的适配问题，因为一个query对应1个或多个subject，简单拼接query与subject并不能达到好的训练效果（subject数量多的query对模型参数影响更大，并不合理），
 
 2026.1.4 实验发现，相同的损失函数（多标签的InfoNCE）用于训练qwen3-emb-0.6b(decode-only系列)与arctic-emb(bert系列)呈现出不同的效果。训练Qwen3-emb-0.6b出现测试结果下降的情况；训练arctic-emb则明显得到提升（recall指标提升10%+）。 qwen3-emb-0.6b先使用多标签的对比损失函数训练，再使用多标签的InfoNCE训练，得到明显提升（recall指标提升10%+）。 arctic-emb与qwen3-emb-0.6b均采用全参数bf16精度训练，固定随机种子seed=42。
