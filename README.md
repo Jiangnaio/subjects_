@@ -1,4 +1,4 @@
-2026.1.22 当前工作总结：探索了通过训练SBert模型在多主题标记的潜力，分别使用Multi-Positive InfoNCE loss, Supervised Contrastive Loss（`supcon` 风格）, Contrastive Loss(带边界 hinge)训练Arctic-Embed, Qwen3-Embedding, e5,MiniLM等嵌入模型均有一定程度的提升，超参数batch_size等徐训练效果影响很大。目前训练最好的是Qwen3-Embedding-4B，采用lora-r32,batch_size取16,梯度累积为3,训练了267 steps（1epoch=2036 steps）。其测试结果对比
+2026.1.22 当前工作总结：探索了通过训练SBert模型在多主题标记的潜力，分别使用Multi-Positive InfoNCE loss, Supervised Contrastive Loss（`supcon` 风格）, Contrastive Loss(带边界 hinge)(损失函数说明见https://github.com/Jiangnaio/subjects_/blob/main/%E6%8D%9F%E5%A4%B1%E5%87%BD%E6%95%B0%E6%8F%8F%E8%BF%B0.md)训练Arctic-Embed, Qwen3-Embedding, e5,MiniLM等嵌入模型均有一定程度的提升，超参数batch_size等徐训练效果影响很大。目前训练最好的是Qwen3-Embedding-4B，采用lora-r32,batch_size取16,梯度累积为3,训练了267 steps（1epoch=2036 steps）。其测试结果对比
 
 **all-test**
 
