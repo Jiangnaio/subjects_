@@ -89,37 +89,9 @@ def set_seed(seed: int = 42):
 
 TASK_DESCRIPTION = "Given a paper's title and abstract, retrieve relevant subject topics"
 
-import math
-# def get_dynamic_temperature(global_step, total_steps): #动态温度1
-#     start_temp = 0.1
-#     end_temp = 0.02
-#     progress = min(global_step / total_steps, 1.0)
-#     cos_val = (1 + math.cos(math.pi * progress)) / 2  # 从1降到0
-#     return end_temp + (start_temp - end_temp) * cos_val
-# def get_dynamic_temperature(global_step, total_steps): # 动态温度2
-#     start_temp = 0.1
-#     end_temp = 0.02
-#     warmup_ratio = 0.1  # 前10%保持高温
-#     progress = min(global_step / total_steps, 1.0)
-
-#     if progress < warmup_ratio:
-#         return start_temp
-#     else:
-#         # 余弦退火从 warmup_ratio 到 1.0
-#         adjusted_progress = (progress - warmup_ratio) / (1 - warmup_ratio)
-#         cos_val = (1 + math.cos(math.pi * adjusted_progress)) / 2
-#         return end_temp + (start_temp - end_temp) * cos_val
 def get_dynamic_temperature(global_step, total_steps): #固定温度
     return 0.05
-    progress = min(global_step / total_steps, 1.0)
-    if progress < 0.3:
-        return 0.06
-    elif progress < 0.6:
-        return 0.05
-    else:
-        return 0.04
-
-        
+  
 def get_gpu_memory_usage():
     if torch.cuda.is_available():
         allocated = torch.cuda.memory_allocated() / 1024 ** 3
