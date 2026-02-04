@@ -26,27 +26,27 @@ warnings.filterwarnings("ignore")
 from contextlib import nullcontext
 import pandas as pd
 
-outdir = './e5-b16-pos6'
+outdir = 'mpnet-base-v2-b8x4'#'./MiniLM-train-b8x4'  # 修改输出目录名
 
-# 配置参数（全参数微调，使用 Qwen3 官方 InfoNCE 损失）
+# 配置参数（适配 MiniLM）
 CONFIG = {
     "seed": 42,
-    "model_name": "intfloat/multilingual-e5-base",
-    "max_length": 512,
-    "batch_size": 16,# m设置为32*1; l设置为8*4
-    "gradient_accumulation_steps": 2,
+    "model_name": "sentence-transformers/paraphrase-multilingual-mpnet-base-v2",#"sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",  # ✅ 替换为 MiniLM
+    "max_length": 512,  # ✅ MiniLM 最大支持 512，但 128 足够，节省显存
+    "batch_size": 8,
+    "gradient_accumulation_steps": 4,
     "num_epochs": 1,
-    "learning_rate": 2e-5,
+    "learning_rate": 2e-5,  # ✅ MiniLM 常用 2e-5，比 arctic 的 1e-5 更高
     "warmup_ratio": 0.1,
     "output_dir": outdir,
     "dataset_dir": "./datasets1",
-    "train_file": "datasets2/qwen3_embedding_train_dedup.json",
-    "eval_file": "qwen3_embedding_dev_with_hard_negs.json",
+    "train_file": "qwen3_embedding_train.json",
+    "eval_file": "qwen3_embedding_dev.json",
     "debug_mode": False,
     "debug_size": 50,
-    "eval_steps": 300,
-    "save_steps": 300,
-    "save_plot_steps": 300,
+    "eval_steps": 100,
+    "save_steps": 100,
+    "save_plot_steps": 100,
     "max_keep_checkpoints": 20,
     "logging_steps": 300,
     "memory_cleanup_steps": 50,
@@ -55,24 +55,20 @@ CONFIG = {
     "checkpoint_dir": f"{outdir}/checkpoints",
     "log_file": f"{outdir}/training_log.json",
     "plot_dir": f"{outdir}/plots",
-    "use_gradient_checkpointing": True,
-    "use_flash_attention": True,
-    "bf16": True, # 使用fp32
-    "max_negatives": 10,                   # 增加负样本数量，通过增加负样本的数量，却是能够帮助模型更好地学习到不同样本之间的差异，从而提高模型的性能。
-    "max_positives": 6,   #8,3 --> 10,5 --> 10,7 --> 10,50(不限制正主题数量)
-    "max_hard_negatives": 0, # 硬负样本
-    "temperature": 0.05,  # Qwen3 官方温度值0.05
-    "early_stopping_patience": 5, #训练到step 2800触发早停（约0.55 epoch）
+    "use_gradient_checkpointing": False,  # ✅ MiniLM 不推荐，可能反而慢
+    "use_flash_attention": False,         # ✅ MiniLM 不支持 flash attention
+    "bf16": True,                       
+    "max_negatives": 10,
+    "max_positives": 5,
+    "max_hard_negatives": 0,
+    "temperature": 0.05,
+    "early_stopping_patience": 5,
     "min_loss_change": 1e-4,
     "use_dynamic_lr": True,
     "eval_batch_size_multiplier": 1,
     "clip_initial_value": 1.0,
     "clip_final_value": 0.3,
-    "loss_type": "info_nce",  # 可选"info_nce"或"supcon"
-    "use_dynamic_temperature": True,
-    "temp_initial": 0.05,
-    "temp_max": 0.15, # 温度最大值
-    "temp_final": 0.08,
+    "loss_type": "info_nce",
 }
 
 def set_seed(seed: int = 42):
@@ -86,17 +82,6 @@ def set_seed(seed: int = 42):
 
 TASK_DESCRIPTION = "Given a paper's title and abstract, retrieve relevant subject topics"
 
-def get_dynamic_temperature(global_step, total_steps): #固定温度
-    return 0.05
-    progress = min(global_step / total_steps, 1.0)
-    if progress < 0.3:
-        return 0.06
-    elif progress < 0.6:
-        return 0.05
-    else:
-        return 0.04
-
-        
 def get_gpu_memory_usage():
     if torch.cuda.is_available():
         allocated = torch.cuda.memory_allocated() / 1024 ** 3
@@ -160,36 +145,30 @@ class ContrastiveDataCollator:
         B = len(queries)
         K = self.K
         
-        # 构建 texts: [B, K], labels: [B, K]
         all_texts = []
         labels = []
         
         for f in features:
-            # 收集所有候选
             candidates = []
             label_list = []
             
-            # 正样本
             pos = f["positive_topics"][:self.max_positives]
             candidates.extend(pos)
             label_list.extend([1] * len(pos))
             
-            # 负样本
             neg = f["negative_topics"][:self.max_negatives]
             candidates.extend(neg)
             label_list.extend([0] * len(neg))
             
-            # 硬负样本
             hard_neg = f.get("hard_negative_topics", [])[:self.max_hard_negatives]
             candidates.extend(hard_neg)
             label_list.extend([0] * len(hard_neg))
             
-            # 补齐到 K（用最后一个元素重复，或空字符串）
             if len(candidates) < K:
                 pad_len = K - len(candidates)
-                pad_token = candidates[-1] if candidates else ""  # 避免空
+                pad_token = candidates[-1] if candidates else ""
                 candidates.extend([pad_token] * pad_len)
-                label_list.extend([0] * pad_len)  # padding 视为负样本（但 loss 中会 mask？）
+                label_list.extend([0] * pad_len)
             elif len(candidates) > K:
                 candidates = candidates[:K]
                 label_list = label_list[:K]
@@ -197,7 +176,6 @@ class ContrastiveDataCollator:
             all_texts.append(candidates)
             labels.append(label_list)
         
-        # Tokenize queries: [B, L]
         query_encodings = self.tokenizer(
             queries,
             max_length=self.max_length,
@@ -206,8 +184,7 @@ class ContrastiveDataCollator:
             return_tensors="pt"
         )
         
-        # Tokenize texts: flatten to [B*K, L], then reshape
-        flat_texts = [text for row in all_texts for text in row]  # [B*K]
+        flat_texts = [text for row in all_texts for text in row]
         text_encodings = self.tokenizer(
             flat_texts,
             max_length=self.max_length,
@@ -215,23 +192,23 @@ class ContrastiveDataCollator:
             truncation=True,
             return_tensors="pt"
         )
-        # Reshape input_ids and attention_mask to [B, K, L]
         L = text_encodings["input_ids"].size(1)
         text_input_ids = text_encodings["input_ids"].view(B, K, L)
         text_attention_mask = text_encodings["attention_mask"].view(B, K, L)
         
-        labels = torch.tensor(labels, dtype=torch.long)  # [B, K]
+        labels = torch.tensor(labels, dtype=torch.long)
         
         return {
             "query_input_ids": query_encodings["input_ids"],
             "query_attention_mask": query_encodings["attention_mask"],
             "text_input_ids": text_input_ids,
             "text_attention_mask": text_attention_mask,
-            "labels": labels,  # [B, K]
+            "labels": labels,
             "num_queries": B
         }
+
 def load_datasets(tokenizer):
-    train_path = CONFIG["train_file"]
+    train_path = os.path.join(CONFIG["dataset_dir"], CONFIG["train_file"])
     eval_path = os.path.join(CONFIG["dataset_dir"], CONFIG["eval_file"])
     train_dataset = ContrastiveDataset(
         train_path, tokenizer,
@@ -256,42 +233,21 @@ def load_datasets(tokenizer):
     return train_dataset, eval_dataset
 
 def initialize_model():
-    # Arctic-Emb-m-v2需要特殊处理
-    from transformers import AutoConfig  # 新增
-    # 1. 先加载 config
-    config = AutoConfig.from_pretrained(
-        CONFIG["model_name"],
-        trust_remote_code=True
-    )
-    
-    # 2. 强制关闭 memory_efficient_attention（关键！）
-    if hasattr(config, "use_memory_efficient_attention"):
-        config.use_memory_efficient_attention = False
+    # ✅ MiniLM 是标准 HuggingFace 模型，无需 trust_remote_code 或特殊 config
     tokenizer = AutoTokenizer.from_pretrained(CONFIG["model_name"])
+    
+    # ✅ 使用 bf16（如果支持），否则 fp32
+    dtype = torch.bfloat16 if CONFIG["bf16"] else torch.float32
 
-    if CONFIG["bf16"]:
-        dtype = torch.bfloat16
-        model = AutoModel.from_pretrained(
-            CONFIG["model_name"], 
-            config=config, # 新增
-            dtype=dtype,
-            trust_remote_code=True,
-            low_cpu_mem_usage=True,
-        )
-    else:
-        dtype = torch.float32
-        model = AutoModel.from_pretrained(
-            CONFIG["model_name"], 
-            config=config, # 新增
-            dtype=dtype,
-            trust_remote_code=True,
-            low_cpu_mem_usage=True,
-            )
+    model = AutoModel.from_pretrained(
+        CONFIG["model_name"],
+        # ✅ 不要加 add_pooling_layer=False！MiniLM 有默认 pooler
+        # ✅ 移除 trust_remote_code, low_cpu_mem_usage
+        torch_dtype=dtype,
+    )
 
     if CONFIG["use_gradient_checkpointing"]:
-        model.gradient_checkpointing_enable(
-            gradient_checkpointing_kwargs={"use_reentrant": False}
-        )
+        model.gradient_checkpointing_enable()
         print("✅ Gradient checkpointing enabled")
 
     model = model.to("cuda")
@@ -309,122 +265,58 @@ def count_trainable_parameters(model):
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     return trainable_params, total_params, trainable_params / total_params * 100
 
-from torch import Tensor
-def average_pool(last_hidden_states: Tensor,
-                 attention_mask: Tensor) -> Tensor:
-    last_hidden = last_hidden_states.masked_fill(~attention_mask[..., None].bool(), 0.0)
-    return last_hidden.sum(dim=1) / attention_mask.sum(dim=1)[..., None]
-
+def mean_pooling(model_output, attention_mask):
+    """
+    ✅ 使用 MiniLM 官方推荐的 mean pooling，而非 [CLS]
+    参考：https://github.com/UKPLab/sentence-transformers/blob/master/sentence_transformers/models/Transformer.py
+    """
+    token_embeddings = model_output[0]  # First element is token embeddings
+    input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
+    return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
 
 def get_embeddings(model, input_ids, attention_mask, dtype=None):
     """
-    Handles both [B, L] and [B, K, L] inputs
+    支持 [B, L] 和 [B, K, L] 输入，使用 mean_pooling
     """
     original_shape = input_ids.shape
     if len(original_shape) == 3:
         B, K, L = original_shape
-        # Flatten to [B*K, L]
         input_ids = input_ids.view(B * K, L)
         attention_mask = attention_mask.view(B * K, L)
         is_text_batch = True
     else:
         is_text_batch = False
 
-    outputs = model(input_ids=input_ids, attention_mask=attention_mask, return_dict=True)
-    embeddings=average_pool(outputs.last_hidden_state, attention_mask)
+    outputs = model(input_ids=input_ids, attention_mask=attention_mask, return_dict=False)
+    
+    embeddings = mean_pooling(outputs, attention_mask)  # ✅ 使用 mean pooling
+    embeddings = F.normalize(embeddings, p=2, dim=-1)
 
     if is_text_batch:
-        embeddings = embeddings.view(B, K, -1)  # [B, K, D]
+        embeddings = embeddings.view(B, K, -1)
 
-    del outputs.last_hidden_state, outputs
+    del outputs
     torch.cuda.empty_cache()
-    return F.normalize(embeddings, p=2, dim=-1)
+    return embeddings
 
 def compute_multi_positive_info_nce_loss(query_embeds, text_embeds, labels, temperature=0.05):
     """
-    向量化 Multi-Positive InfoNCE Loss
-    Args:
-        query_embeds: [B, D]
-        text_embeds: [B, K, D]
-        labels: [B, K]  (1=positive, 0=negative)
-        temperature: scalar
-    Returns:
-        scalar loss
+    向量化 Multi-Positive InfoNCE Loss —— 无需修改，完全兼容
     """
     B, K, D = text_embeds.shape
     
-    # Compute cosine similarities: [B, K]
     sim = torch.einsum('bd,bkd->bk', query_embeds, text_embeds) / temperature
+    pos_mask = (labels == 1)
+    pos_sim = sim.masked_fill(~pos_mask, -1e4)
+    numerator = torch.logsumexp(pos_sim, dim=1)
+    denominator = torch.logsumexp(sim, dim=1)
+    loss_per_query = denominator - numerator
     
-    # Numerator: log-sum-exp of positive samples for each query
-    # Mask: [B, K]
-    pos_mask = (labels == 1)  # [B, K]
-    pos_sim = sim.masked_fill(~pos_mask, -1e9)  # 非正样本设为极小值
-    numerator = torch.logsumexp(pos_sim, dim=1)    # [B]
-    
-    # Denominator: log-sum-exp over all K candidates
-    denominator = torch.logsumexp(sim, dim=1)      # [B]
-    
-    # Loss per query: [B]
-    loss_per_query = denominator - numerator       # [B]
-    
-    # Remove queries with no positive samples (though should not happen)
-    valid_mask = pos_mask.any(dim=1)  # [B]
+    valid_mask = pos_mask.any(dim=1)
     if valid_mask.sum() == 0:
         return torch.tensor(0.0, device=query_embeds.device, requires_grad=True)
     
     loss = loss_per_query[valid_mask].mean()
-    return loss
-
-def compute_supcon_style_loss(query_embeds, text_embeds, labels, temperature=0.05):
-    """
-    Batch-wise Supervised Contrastive Loss (Query-Anchored)
-    
-    Args:
-        query_embeds: [B, D]
-        text_embeds: [B, K, D]
-        labels: [B, K] (1=positive, 0=negative)
-        temperature: float
-    
-    Returns:
-        scalar loss
-    """
-    device = query_embeds.device
-    B, K, D = text_embeds.shape
-
-    # Flatten text embeddings: [B*K, D]
-    text_embeds_flat = text_embeds.view(-1, D)  # [B*K, D]
-    labels_flat = labels.view(-1)  # [B*K]
-
-    # Compute similarity matrix: [B, B*K]
-    # sim[i, j] = cosine similarity between query i and topic j
-    sim_matrix = torch.matmul(query_embeds, text_embeds_flat.T) / temperature  # [B, B*K]
-
-    # Build positive mask: [B, B*K]
-    # Only topics from the same query-i can be positive for query-i
-    pos_mask = torch.zeros(B, B*K, dtype=torch.bool, device=device)
-    for i in range(B):
-        start = i * K
-        end = (i + 1) * K
-        pos_mask[i, start:end] = (labels[i] == 1)
-
-    # Remove queries with no positives
-    valid_query_mask = pos_mask.any(dim=1)  # [B]
-    if not valid_query_mask.any():
-        return torch.tensor(0.0, device=device, requires_grad=True)
-
-    # Numerator: log-sum-exp of positives for each valid query
-    sim_pos = sim_matrix.masked_fill(~pos_mask, -1e9)  # [B, B*K]
-    numerator = torch.logsumexp(sim_pos, dim=1)  # [B]
-
-    # Denominator: log-sum-exp over ALL candidates (B*K)
-    denominator = torch.logsumexp(sim_matrix, dim=1)  # [B]
-
-    # Loss per query
-    loss_per_query = denominator - numerator  # [B]
-
-    # Mean over valid queries
-    loss = loss_per_query[valid_query_mask].mean()
     return loss
 
 def evaluate(model, dataloader, device, dtype, temperature=0.05):
@@ -446,12 +338,7 @@ def evaluate(model, dataloader, device, dtype, temperature=0.05):
                 if CONFIG["loss_type"] == "info_nce":
                     loss = compute_multi_positive_info_nce_loss(
                         query_embeds, text_embeds, labels,
-                        temperature=temperature
-                    )
-                elif CONFIG["loss_type"] == "supcon":
-                    loss = compute_supcon_style_loss(
-                        query_embeds, text_embeds, labels,
-                        temperature=temperature
+                        temperature=CONFIG["temperature"]
                     )
                 total_loss += loss.item() * num_queries
                 total_samples += num_queries
@@ -576,11 +463,10 @@ if __name__ == "__main__":
     for d in [CONFIG["output_dir"], CONFIG["checkpoint_dir"], CONFIG["plot_dir"]]:
         os.makedirs(d, exist_ok=True)
 
-    print(f"Starting FULL FINE-TUNING of Arcitc Embedding with InfoNCE loss...")
+    print(f"Starting FULL FINE-TUNING of MiniLM with InfoNCE loss...")
     device = "cuda"
 
     tokenizer = AutoTokenizer.from_pretrained(CONFIG["model_name"])
-
 
     train_dataset, eval_dataset = load_datasets(tokenizer)
     print(f"Train: {len(train_dataset)}, Eval: {len(eval_dataset)}")
@@ -607,33 +493,12 @@ if __name__ == "__main__":
         latest_checkpoint = find_latest_checkpoint(CONFIG["checkpoint_dir"])
         if latest_checkpoint:
             print(f"🔍 Resuming from checkpoint: {latest_checkpoint}")
-
             tokenizer = AutoTokenizer.from_pretrained(CONFIG["model_name"])
-            if CONFIG["bf16"]:
-                dtype = torch.bfloat16
-                model = AutoModel.from_pretrained(
-                    CONFIG["model_name"], 
-                    add_pooling_layer=False,
-                    dtype=dtype,
-                    trust_remote_code=True,
-                    low_cpu_mem_usage=True,
-                    # attn_implementation="flash_attention_2"  # 新增 flash-attn还不支持Bert模型
-                )
-            else:
-                dtype = torch.float32
-                model = AutoModel.from_pretrained(
-                    CONFIG["model_name"], 
-                    add_pooling_layer=False,
-                    trust_remote_code=True,
-                    low_cpu_mem_usage=True,
-                    )
-            model.to(device)
+            dtype = torch.bfloat16 if CONFIG["bf16"] else torch.float32
+            model = AutoModel.from_pretrained(latest_checkpoint, torch_dtype=dtype)
             if CONFIG["use_gradient_checkpointing"]:
-                model.gradient_checkpointing_enable(
-                    gradient_checkpointing_kwargs={"use_reentrant": False}
-                )
-                print("✅ Gradient checkpointing enabled")
-
+                model.gradient_checkpointing_enable()
+            model.to(device)
             state = load_training_state(latest_checkpoint)
             if state:
                 start_epoch = state["epoch"]
@@ -665,7 +530,7 @@ if __name__ == "__main__":
     best_model_path = os.path.join(CONFIG["output_dir"], "best_model")
 
     print(f"Total steps: {total_steps}, Warmup: {warmup_steps}")
-    temp = get_dynamic_temperature(global_step, total_steps)
+
     for epoch in range(start_epoch, CONFIG["num_epochs"]):
         model.train()
         progress_bar = tqdm(train_dataloader, desc=f"Epoch {epoch+1}/{CONFIG['num_epochs']}")
@@ -681,30 +546,22 @@ if __name__ == "__main__":
                     break
 
         for step, batch in batch_iter:
-            
             query_input_ids = batch["query_input_ids"].to(device, non_blocking=True)
             query_attention_mask = batch["query_attention_mask"].to(device, non_blocking=True)
             text_input_ids = batch["text_input_ids"].to(device, non_blocking=True)
             text_attention_mask = batch["text_attention_mask"].to(device, non_blocking=True)
             labels = batch["labels"].to(device, non_blocking=True)
 
-            temp = get_dynamic_temperature(global_step, total_steps)
             try:
-                with torch.autocast(device_type="cuda", dtype=dtype):
+                # ✅ 使用自动混合精度（bf16）
+                with torch.autocast(device_type="cuda", dtype=torch.bfloat16 if CONFIG["bf16"] else torch.float32):
                     q_emb = get_embeddings(model, query_input_ids, query_attention_mask, dtype)
                     t_emb = get_embeddings(model, text_input_ids, text_attention_mask, dtype)
                     if CONFIG["loss_type"]=="info_nce":
                         loss = compute_multi_positive_info_nce_loss(
                             q_emb, t_emb, labels,
-                            temperature=temp
+                            temperature=CONFIG["temperature"]
                         )
-                    elif CONFIG["loss_type"] == "supcon":
-                        loss = compute_supcon_style_loss(
-                            q_emb, t_emb, labels,
-                            temperature=temp
-                        )
-
-            
 
                 scaled_loss = loss / CONFIG["gradient_accumulation_steps"]
                 scaled_loss.backward()
@@ -735,7 +592,7 @@ if __name__ == "__main__":
                         print(f"Step {global_step} | Loss: {avg_loss:.4f} | LR: {current_lr:.2e} | GPU: {allocated:.2f}GB")
 
                     if global_step % CONFIG["eval_steps"] == 0:
-                        eval_loss = evaluate(model, eval_dataloader, device, dtype, temp)
+                        eval_loss = evaluate(model, eval_dataloader, device, dtype, CONFIG["temperature"])
                         log_entry['eval_loss'] = eval_loss
                         if eval_loss < best_eval_loss - CONFIG["min_loss_change"]:
                             best_eval_loss = eval_loss
@@ -762,7 +619,7 @@ if __name__ == "__main__":
                 if 'loss' in locals(): del loss
                 cleanup_memory()
 
-        final_eval_loss = evaluate(model, eval_dataloader, device, dtype, temp)
+        final_eval_loss = evaluate(model, eval_dataloader, device, dtype, CONFIG["temperature"])
         print(f"Epoch {epoch+1} finished. Final eval loss: {final_eval_loss:.4f}")
         save_model(model, tokenizer, os.path.join(CONFIG["output_dir"], f"epoch-{epoch+1}"))
 
